@@ -35,6 +35,8 @@ message MountConfiguration {
     // NFSv4.1 (RFC 8881). The use of NFSv4.1 is recommended, because it
     // provides better parallelism.
     NFSv4MountConfiguration nfsv4 = 3;
+    
+    WinFSPMountConfiguration winfsp = 4;
   }
 }
 
@@ -278,4 +280,7 @@ message RPCv2SystemAuthenticationConfiguration {
   // that this is set to LEAST_RECENTLY_USED.
   buildbarn.configuration.eviction.CacheReplacementPolicy
       cache_replacement_policy = 3;
+}
+
+message WinFSPMountConfiguration {
 }

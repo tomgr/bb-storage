@@ -43,6 +43,13 @@ type nfsv4Mount struct {
 	leavesAttributeCaching           AttributeCachingDuration
 }
 
+type winfspMount struct {
+	mountPath       string
+	configuration   *pb.WinFSPMountConfiguration
+	handleAllocator *virtual.FUSEStatefulHandleAllocator
+	fsName          string
+}
+
 func (m *nfsv4Mount) Expose(terminationGroup program.Group, rootDirectory virtual.Directory) error {
 	// Random values that the client can use to identify the server, or
 	// detect that the server has been restarted and lost all state.
@@ -158,6 +165,14 @@ func NewMountFromConfiguration(configuration *pb.MountConfiguration, fsName stri
 			rootDirectoryAttributeCaching:    rootDirectoryAttributeCaching,
 			childDirectoriesAttributeCaching: childDirectoriesAttributeCaching,
 			leavesAttributeCaching:           leavesAttributeCaching,
+		}, handleAllocator, nil
+	case *pb.MountConfiguration_Winfsp:
+		handleAllocator := virtual.NewFUSEHandleAllocator(random.FastThreadSafeGenerator)
+		return &winfspMount{
+			mountPath:       configuration.MountPath,
+			configuration:   backend.Winfsp,
+			handleAllocator: handleAllocator,
+			fsName:          fsName,
 		}, handleAllocator, nil
 	default:
 		return nil, nil, status.Error(codes.InvalidArgument, "No virtual file system backend configuration provided")

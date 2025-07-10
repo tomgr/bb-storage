@@ -10,6 +10,7 @@ replace github.com/hanwen/go-fuse/v2 => github.com/hanwen/go-fuse/v2 v2.5.1
 
 require (
 	cloud.google.com/go/longrunning v0.6.6
+	github.com/aegistudio/go-winfsp v1.0.0
 	github.com/bazelbuild/buildtools v0.0.0-20250410144851-f37c35dc3237
 	github.com/bazelbuild/remote-apis v0.0.0-20250410133023-536ec595e1df
 	github.com/buildbarn/bb-storage v0.0.0-20250612195753-87ea1750ca4c
@@ -90,6 +91,7 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/lazybeaver/xorshift v0.0.0-20170702203709-ce511d4823dd // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
