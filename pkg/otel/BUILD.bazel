@@ -74,5 +74,6 @@ genrule(
     ],
     outs = ["stylesheet.css"],
     cmd = "BAZEL_BINDIR=$(BINDIR) $(location :purgecss) --css $${PWD}/$(location @com_github_twbs_bootstrap//:css/bootstrap.min.css) --content $${PWD}/$(location active_spans.html) --output $${PWD}/$@",
+    cmd_bat = "set BAZEL_BINDIR=$(BINDIR)&&$(location :purgecss) --css $${PWD}/$(location @com_github_twbs_bootstrap//:css/bootstrap.min.css) --content $${PWD}/$(location active_spans.html) --output $${PWD}/$@",
     tools = [":purgecss"],
 )
