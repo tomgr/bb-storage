@@ -49,7 +49,7 @@ type Directory interface {
 	//
 	// Either one or both of createAttributes and existingOptions
 	// need to be provided.
-	VirtualOpenChild(ctx context.Context, name path.Component, shareAccess ShareMask, createAttributes *Attributes, existingOptions *OpenExistingOptions, requested AttributesMask, openedFileAttributes *Attributes) (Leaf, AttributesMask, ChangeInfo, Status)
+	VirtualOpenChild(ctx context.Context, name path.Component, shareAccess ShareMask, createAttributes *Attributes, existingOptions *OpenExistingOptions, requested AttributesMask, openedFileAttributes *Attributes) (Child[Directory, Leaf, Node], AttributesMask, ChangeInfo, Status)
 	// VirtualLink links an existing file into the directory.
 	VirtualLink(ctx context.Context, name path.Component, leaf Leaf, requested AttributesMask, attributes *Attributes) (ChangeInfo, Status)
 	// VirtualLookup obtains the inode corresponding with a child

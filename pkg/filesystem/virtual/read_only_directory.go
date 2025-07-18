@@ -69,9 +69,9 @@ func ReadOnlyDirectoryOpenChildWrongFileType(existingOptions *OpenExistingOption
 // implementing Directory.VirtualOpenChild() for read-only directories.
 // It can be used to obtain return values in case the directory doesn't
 // contains any file under a given name.
-func ReadOnlyDirectoryOpenChildDoesntExist(createAttributes *Attributes) (Leaf, AttributesMask, ChangeInfo, Status) {
+func ReadOnlyDirectoryOpenChildDoesntExist(createAttributes *Attributes) (DirectoryChild, AttributesMask, ChangeInfo, Status) {
 	if createAttributes == nil {
-		return nil, 0, ChangeInfo{}, StatusErrNoEnt
+		return DirectoryChild{}, 0, ChangeInfo{}, StatusErrNoEnt
 	}
-	return nil, 0, ChangeInfo{}, StatusErrROFS
+	return DirectoryChild{}, 0, ChangeInfo{}, StatusErrROFS
 }

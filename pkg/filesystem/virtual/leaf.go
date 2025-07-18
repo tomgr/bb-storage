@@ -24,10 +24,13 @@ func (sm ShareMask) Count() uint {
 }
 
 // OpenExistingOptions contains options that describe what should happen
-// with a file when opened. The Truncate option corresponds to open()'s
-// O_TRUNC option. This option has no effect on freshly created files,
-// as those are always empty.
+// with a file when opened. These options are not allowed to be used with
+// directories, and if an existing directory is found, an error will be
+// returned.
 type OpenExistingOptions struct {
+	// The Truncate option corresponds to open()'s O_TRUNC option. This
+	// option has no effect on freshly created files, as those are always
+	// empty.
 	Truncate bool
 }
 

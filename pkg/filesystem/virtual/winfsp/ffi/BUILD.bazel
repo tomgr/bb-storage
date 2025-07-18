@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ffi",
+    srcs = [
+        "filetime_windows.go",
+        "fsctl_windows.go",
+        "host_windows.go",
+        "winfsp_windows.go",
+    ],
+    importpath = "github.com/buildbarn/bb-remote-execution/pkg/filesystem/virtual/winfsp/ffi",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pkg_errors//:errors",
+        "@org_golang_x_sys//windows",
+    ],
+)

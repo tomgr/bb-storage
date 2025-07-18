@@ -2250,9 +2250,10 @@ func (s *sequenceState) opOpen(ctx context.Context, args *nfsv4.Open4args) nfsv4
 			return &nfsv4.Open4res_default{Status: st}
 		}
 
+		var child virtual.DirectoryChild
 		var attributes virtual.Attributes
 		var vs virtual.Status
-		leaf, respected, changeInfo, vs = currentDirectory.VirtualOpenChild(
+		child, respected, changeInfo, vs = currentDirectory.VirtualOpenChild(
 			ctx,
 			name,
 			shareAccess,
@@ -2262,6 +2263,10 @@ func (s *sequenceState) opOpen(ctx context.Context, args *nfsv4.Open4args) nfsv4
 			&attributes)
 		if vs != virtual.StatusOK {
 			return &nfsv4.Open4res_default{Status: toNFSv4Status(vs)}
+		}
+		_, leaf = child.GetPair()
+		if leaf == nil {
+			return &nfsv4.Open4res_default{Status: nfsv4.NFS4ERR_ISDIR}
 		}
 		handle = attributes.GetFileHandle()
 	case *nfsv4.OpenClaim4_CLAIM_FH, *nfsv4.OpenClaim4_CLAIM_PREVIOUS:

@@ -79,19 +79,25 @@ func (d *staticDirectory) VirtualLookup(ctx context.Context, name path.Component
 	return DirectoryChild{}, StatusErrNoEnt
 }
 
-func (d *staticDirectory) VirtualOpenChild(ctx context.Context, name path.Component, shareAccess ShareMask, createAttributes *Attributes, existingOptions *OpenExistingOptions, requested AttributesMask, openedFileAttributes *Attributes) (Leaf, AttributesMask, ChangeInfo, Status) {
+func (d *staticDirectory) VirtualOpenChild(ctx context.Context, name path.Component, shareAccess ShareMask, createAttributes *Attributes, existingOptions *OpenExistingOptions, requested AttributesMask, openedFileAttributes *Attributes) (DirectoryChild, AttributesMask, ChangeInfo, Status) {
 	if i := sort.Search(len(d.entries), func(i int) bool {
 		return d.entries[i].name.String() >= name.String()
 	}); i < len(d.entries) && d.entries[i].name == name {
 		if existingOptions == nil {
-			return nil, 0, ChangeInfo{}, StatusErrExist
+			return DirectoryChild{}, 0, ChangeInfo{}, StatusErrExist
 		}
 		directory, leaf := d.entries[i].child.GetPair()
-		if directory != nil {
-			return nil, 0, ChangeInfo{}, StatusErrIsDir
+		var s Status
+		if leaf == nil {
+			if existingOptions.Truncate {
+				return DirectoryChild{}, 0, ChangeInfo{}, StatusErrIsDir
+			}
+			directory.VirtualGetAttributes(ctx, requested, openedFileAttributes)
+			s = StatusOK
+		} else {
+			s = leaf.VirtualOpenSelf(ctx, shareAccess, existingOptions, requested, openedFileAttributes)
 		}
-		s := leaf.VirtualOpenSelf(ctx, shareAccess, existingOptions, requested, openedFileAttributes)
-		return leaf, existingOptions.ToAttributesMask(), ChangeInfo{
+		return d.entries[i].child, existingOptions.ToAttributesMask(), ChangeInfo{
 			Before: 0,
 			After:  0,
 		}, s

@@ -1568,7 +1568,7 @@ func (s *compoundState) txOpen(ctx context.Context, args *nfsv4.Open4args, oos *
 
 		// Open the file.
 		var attributes virtual.Attributes
-		leaf, respected, changeInfo, vs := currentDirectory.VirtualOpenChild(
+		child, respected, changeInfo, vs := currentDirectory.VirtualOpenChild(
 			ctx,
 			name,
 			shareAccess,
@@ -1578,6 +1578,10 @@ func (s *compoundState) txOpen(ctx context.Context, args *nfsv4.Open4args, oos *
 			&attributes)
 		if vs != virtual.StatusOK {
 			return &nfsv4.Open4res_default{Status: toNFSv4Status(vs)}
+		}
+		_, leaf := child.GetPair()
+		if leaf == nil {
+			return &nfsv4.Open4res_default{Status: nfsv4.NFS4ERR_ISDIR}
 		}
 
 		handle := attributes.GetFileHandle()

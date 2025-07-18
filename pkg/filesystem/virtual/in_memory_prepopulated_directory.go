@@ -657,26 +657,34 @@ func (i *inMemoryPrepopulatedDirectory) virtualGetContents() (*inMemoryDirectory
 	return contents, StatusOK
 }
 
-func (i *inMemoryPrepopulatedDirectory) VirtualOpenChild(ctx context.Context, name path.Component, shareAccess ShareMask, createAttributes *Attributes, existingOptions *OpenExistingOptions, requested AttributesMask, openedFileAttributes *Attributes) (Leaf, AttributesMask, ChangeInfo, Status) {
+func (i *inMemoryPrepopulatedDirectory) VirtualOpenChild(ctx context.Context, name path.Component, shareAccess ShareMask, createAttributes *Attributes, existingOptions *OpenExistingOptions, requested AttributesMask, openedFileAttributes *Attributes) (DirectoryChild, AttributesMask, ChangeInfo, Status) {
 	i.lock.Lock()
 	defer i.lock.Unlock()
 
 	contents, s := i.virtualGetContents()
 	if s != StatusOK {
-		return nil, 0, ChangeInfo{}, s
+		return DirectoryChild{}, 0, ChangeInfo{}, s
 	}
 
 	if entry, ok := contents.entriesMap[name]; ok {
 		// File already exists.
 		if existingOptions == nil {
-			return nil, 0, ChangeInfo{}, StatusErrExist
+			return DirectoryChild{}, 0, ChangeInfo{}, StatusErrExist
 		}
+		var dirChild DirectoryChild
 		directory, leaf := entry.child.GetPair()
-		if directory != nil {
-			return nil, 0, ChangeInfo{}, StatusErrIsDir
+		if leaf == nil {
+			if existingOptions.Truncate {
+				return DirectoryChild{}, 0, ChangeInfo{}, StatusErrIsDir
+			}
+			dirChild = DirectoryChild{}.FromDirectory(directory)
+			directory.VirtualGetAttributes(ctx, requested, openedFileAttributes)
+			s = StatusOK
+		} else {
+			dirChild = DirectoryChild{}.FromLeaf(leaf)
+			s = leaf.VirtualOpenSelf(ctx, shareAccess, existingOptions, requested, openedFileAttributes)
 		}
-		s := leaf.VirtualOpenSelf(ctx, shareAccess, existingOptions, requested, openedFileAttributes)
-		return leaf, existingOptions.ToAttributesMask(), ChangeInfo{
+		return dirChild, existingOptions.ToAttributesMask(), ChangeInfo{
 			Before: contents.changeID,
 			After:  contents.changeID,
 		}, s
@@ -684,7 +692,7 @@ func (i *inMemoryPrepopulatedDirectory) VirtualOpenChild(ctx context.Context, na
 
 	// File doesn't exist.
 	if contents.isDeleted || createAttributes == nil {
-		return nil, 0, ChangeInfo{}, StatusErrNoEnt
+		return DirectoryChild{}, 0, ChangeInfo{}, StatusErrNoEnt
 	}
 
 	// Create new file with attributes provided.
@@ -701,14 +709,14 @@ func (i *inMemoryPrepopulatedDirectory) VirtualOpenChild(ctx context.Context, na
 	}
 	leaf, s := i.subtree.fileAllocator.NewFile(isExecutable, size, shareAccess)
 	if s != StatusOK {
-		return nil, 0, ChangeInfo{}, s
+		return DirectoryChild{}, 0, ChangeInfo{}, s
 	}
 
 	// Attach file to the directory.
 	changeIDBefore := contents.changeID
 	contents.attach(i.subtree, name, inMemoryDirectoryChild{}.FromLeaf(leaf))
 	leaf.VirtualGetAttributes(ctx, requested, openedFileAttributes)
-	return leaf, respected, ChangeInfo{
+	return DirectoryChild{}.FromLeaf(leaf), respected, ChangeInfo{
 		Before: changeIDBefore,
 		After:  contents.changeID,
 	}, StatusOK
