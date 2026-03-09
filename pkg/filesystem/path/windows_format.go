@@ -30,7 +30,7 @@ func stripWindowsSeparators(p string) string {
 	return p
 }
 
-func parseUNCPath(uncPath string, scopeWalker ScopeWalker) (ComponentWalker, RelativeParser, error) {
+func parseUNCPath(uncPath string, prefix WindowsPrefixKind, scopeWalker ScopeWalker) (ComponentWalker, RelativeParser, error) {
 	serverLen := strings.IndexAny(uncPath, "\\/")
 	if serverLen == -1 {
 		return nil, nil, status.Error(codes.InvalidArgument, "Invalid UNC path: expected a non-empty server and share name")
@@ -48,7 +48,11 @@ func parseUNCPath(uncPath string, scopeWalker ScopeWalker) (ComponentWalker, Rel
 	share := uncPath[shareStart : shareStart+shareLen]
 	remainder := uncPath[shareStart+shareLen+1:]
 
-	next, err := scopeWalker.OnShare(server, share)
+	next, err := scopeWalker.OnWindowsRoot(WindowsRootShare{
+		Prefix: prefix,
+		Server: server,
+		Share:  share,
+	})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -60,30 +64,38 @@ type windowsParser struct {
 }
 
 func (p windowsParser) ParseScope(scopeWalker ScopeWalker) (next ComponentWalker, remainder RelativeParser, err error) {
-	// Handle extended-length paths starting with \\?\.
+	// Strip any namespace prefix (\\?\, \??\ or \\.\) from the
+	// path, remembering which prefix was present.
 	path := p.path
+	prefix := WindowsPrefixNone
 	if len(p.path) >= 4 && p.path[0] == '\\' && p.path[1] == '\\' && p.path[2] == '?' && p.path[3] == '\\' {
+		// Extended-length paths starting with \\?\.
 		path = p.path[4:]
-		// Handle \\?\UNC\.
-		if len(path) >= 4 && strings.EqualFold(path[:4], "UNC\\") {
-			return parseUNCPath(path[4:], scopeWalker)
-		}
+		prefix = WindowsPrefixExtendedLength
+	} else if len(p.path) >= 4 && p.path[0] == '\\' && p.path[1] == '?' && p.path[2] == '?' && p.path[3] == '\\' {
+		// NT object namespace paths starting with \??\.
+		// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-even/c1550f98-a1ce-426a-9991-7509e7c3787c
+		path = p.path[4:]
+		prefix = WindowsPrefixNtNamespace
+	} else if len(p.path) >= 4 && p.path[0] == '\\' && p.path[1] == '\\' && p.path[2] == '.' && p.path[3] == '\\' {
+		// Win32 device namespace paths starting with \\.\.
+		// https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#win32-device-namespaces
+		path = p.path[4:]
+		prefix = WindowsPrefixDevice
 	}
 
-	// Handle NT object namespace paths starting with \??\.
-	// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-even/c1550f98-a1ce-426a-9991-7509e7c3787c
-	if len(p.path) >= 4 && p.path[0] == '\\' && p.path[1] == '?' && p.path[2] == '?' && p.path[3] == '\\' {
-		path = p.path[4:]
-		// Handle \??\UNC\
-		if len(path) >= 4 && strings.EqualFold(path[:4], "UNC\\") {
-			return parseUNCPath(path[4:], scopeWalker)
-		}
+	if prefix != WindowsPrefixNone && len(path) >= 4 && strings.EqualFold(path[:4], "UNC\\") {
+		// Handle UNC paths following a namespace prefix.
+		return parseUNCPath(path[4:], prefix, scopeWalker)
 	}
 
 	if len(path) >= 2 {
 		upperDriveLetter := path[0] &^ 0x20
 		if upperDriveLetter >= 'A' && upperDriveLetter <= 'Z' && path[1] == ':' {
-			next, err = scopeWalker.OnDriveLetter(rune(upperDriveLetter))
+			next, err = scopeWalker.OnWindowsRoot(WindowsRootDriveLetter{
+				Prefix: prefix,
+				Drive:  rune(upperDriveLetter),
+			})
 			if err != nil {
 				return nil, nil, err
 			}
@@ -91,7 +103,7 @@ func (p windowsParser) ParseScope(scopeWalker ScopeWalker) (next ComponentWalker
 		}
 
 		if (path[0] == '\\' || path[0] == '/') && (path[1] == '\\' || path[1] == '/') {
-			return parseUNCPath(path[2:], scopeWalker)
+			return parseUNCPath(path[2:], prefix, scopeWalker)
 		}
 	}
 

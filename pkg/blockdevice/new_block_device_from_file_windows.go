@@ -182,26 +182,26 @@ type rootPathScopeWalker struct {
 }
 
 func (w *rootPathScopeWalker) OnAbsolute() (path.ComponentWalker, error) {
-	w.err = status.Error(codes.InvalidArgument, "Path is absolute, while a path begining with a drive letter or a UNC path was expected")
-	return path.VoidComponentWalker, nil
-}
-
-func (w *rootPathScopeWalker) OnDriveLetter(drive rune) (path.ComponentWalker, error) {
-	// We want to return C:\, including the trailing backslash
-	// (see GetDiskFreeSpaceW).
-	w.rootPath = fmt.Sprintf(`%c:\`, drive)
+	w.err = status.Error(codes.InvalidArgument, "Path is absolute, while a path beginning with a drive letter or a UNC path was expected")
 	return path.VoidComponentWalker, nil
 }
 
 func (w *rootPathScopeWalker) OnRelative() (path.ComponentWalker, error) {
-	w.err = status.Error(codes.InvalidArgument, "Path is relative, while a path begining with a drive letter or a UNC path was expected")
+	w.err = status.Error(codes.InvalidArgument, "Path is relative, while a path beginning with a drive letter or a UNC path was expected")
 	return path.VoidComponentWalker, nil
 }
 
-func (w *rootPathScopeWalker) OnShare(server, share string) (path.ComponentWalker, error) {
-	// We want to return \\server\share\, including the trailing backslash
-	// (see GetDiskFreeSpaceW).
-	w.rootPath = fmt.Sprintf(`\\%s\%s\`, server, share)
+func (w *rootPathScopeWalker) OnWindowsRoot(root path.WindowsRootKind) (path.ComponentWalker, error) {
+	switch r := root.(type) {
+	case path.WindowsRootDriveLetter:
+		// We want to return C:\, including the trailing backslash
+		// (see GetDiskFreeSpaceW).
+		w.rootPath = fmt.Sprintf(`%c:\`, r.Drive)
+	case path.WindowsRootShare:
+		// We want to return \\server\share\, including the trailing backslash
+		// (see GetDiskFreeSpaceW).
+		w.rootPath = fmt.Sprintf(`\\%s\%s\`, r.Server, r.Share)
+	}
 	return path.VoidComponentWalker, nil
 }
 

@@ -199,10 +199,6 @@ func (w *virtualRootScopeWalker) OnAbsolute() (ComponentWalker, error) {
 	return w.getComponentWalker(w.rootNode)
 }
 
-func (w *virtualRootScopeWalker) OnDriveLetter(drive rune) (ComponentWalker, error) {
-	return w.getComponentWalker(w.rootNode)
-}
-
 func (w *virtualRootScopeWalker) OnRelative() (ComponentWalker, error) {
 	// Attempted to resolve a relative path. There is no need to
 	// rewrite any paths. Do wrap the ComponentWalker to ensure
@@ -217,7 +213,7 @@ func (w *virtualRootScopeWalker) OnRelative() (ComponentWalker, error) {
 	}, nil
 }
 
-func (w *virtualRootScopeWalker) OnShare(server, share string) (ComponentWalker, error) {
+func (w *virtualRootScopeWalker) OnWindowsRoot(root WindowsRootKind) (ComponentWalker, error) {
 	return w.getComponentWalker(w.rootNode)
 }
 

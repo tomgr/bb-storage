@@ -28,6 +28,7 @@ type Builder struct {
 	server               string
 	share                string
 	suffix               string
+	windowsPrefix        WindowsPrefixKind
 }
 
 var (
@@ -71,6 +72,25 @@ func (b *Builder) GetUNIXString() string {
 	return out.String()
 }
 
+// windowsNamespacePrefixString returns the namespace prefix string
+// (e.g. \\?\, \??\, \\.\) for the given output format.
+func (b *Builder) windowsNamespacePrefixString(format WindowsPathFormat) string {
+	switch format {
+	case WindowsPathFormatDevicePath:
+		return `\??\`
+	case WindowsPathFormatStandard, WindowsPathFormatNoTrailingSeparator:
+		switch b.windowsPrefix {
+		case WindowsPrefixExtendedLength:
+			return `\\?\`
+		case WindowsPrefixNtNamespace:
+			return `\??\`
+		case WindowsPrefixDevice:
+			return `\\.\`
+		}
+	}
+	return ""
+}
+
 // GetWindowsString returns a string representation of the path for use on
 // Windows.
 func (b *Builder) GetWindowsString(format WindowsPathFormat) (string, error) {
@@ -78,17 +98,15 @@ func (b *Builder) GetWindowsString(format WindowsPathFormat) (string, error) {
 	var out strings.Builder
 	prefix := ""
 	if b.driveLetter != 0 {
-		if format == WindowsPathFormatDevicePath {
-			out.WriteString(`\??\`)
-		}
+		out.WriteString(b.windowsNamespacePrefixString(format))
 		out.WriteString(string(b.driveLetter))
 		out.WriteString(":")
 		prefix = "\\"
 	} else if b.server != "" {
-		switch format {
-		case WindowsPathFormatDevicePath:
-			out.WriteString(`\??\UNC\`)
-		case WindowsPathFormatStandard:
+		if nsPrefix := b.windowsNamespacePrefixString(format); nsPrefix != "" {
+			out.WriteString(nsPrefix)
+			out.WriteString(`UNC\`)
+		} else {
 			out.WriteString(`\\`)
 		}
 		out.WriteString(b.server)
@@ -110,13 +128,17 @@ func (b *Builder) GetWindowsString(format WindowsPathFormat) (string, error) {
 	}
 
 	// Emit trailing slash in case the path refers to a directory,
-	// or a dot or slash if the path is empty. The suffix is been
+	// or a dot or slash if the path is empty. The suffix has been
 	// constructed by platform-independent code that uses forward
 	// slashes. To construct a Windows path we must use a
 	// backslash.
 	suffix := b.suffix
 	if suffix == "/" {
-		suffix = "\\"
+		if format == WindowsPathFormatNoTrailingSeparator && len(b.components) > 0 {
+			suffix = ""
+		} else {
+			suffix = "\\"
+		}
 	}
 	out.WriteString(suffix)
 	return out.String(), nil
@@ -185,9 +207,16 @@ func (b *Builder) getComponentWalker(base ComponentWalker) ComponentWalker {
 // previously constructed path.
 func (b *Builder) ParseScope(scopeWalker ScopeWalker) (next ComponentWalker, remainder RelativeParser, err error) {
 	if b.driveLetter != 0 {
-		next, err = scopeWalker.OnDriveLetter(b.driveLetter)
+		next, err = scopeWalker.OnWindowsRoot(WindowsRootDriveLetter{
+			Prefix: b.windowsPrefix,
+			Drive:  b.driveLetter,
+		})
 	} else if b.server != "" {
-		next, err = scopeWalker.OnShare(b.server, b.share)
+		next, err = scopeWalker.OnWindowsRoot(WindowsRootShare{
+			Prefix: b.windowsPrefix,
+			Server: b.server,
+			Share:  b.share,
+		})
 	} else if b.absolute {
 		next, err = scopeWalker.OnAbsolute()
 	} else {
@@ -239,20 +268,6 @@ func (w *buildingScopeWalker) OnAbsolute() (ComponentWalker, error) {
 	return w.b.getComponentWalker(componentWalker), nil
 }
 
-func (w *buildingScopeWalker) OnDriveLetter(drive rune) (ComponentWalker, error) {
-	componentWalker, err := w.base.OnDriveLetter(drive)
-	if err != nil {
-		return nil, err
-	}
-	*w.b = Builder{
-		absolute:    true,
-		driveLetter: drive,
-		components:  w.b.components[:0],
-		suffix:      "/",
-	}
-	return w.b.getComponentWalker(componentWalker), nil
-}
-
 func (w *buildingScopeWalker) OnRelative() (ComponentWalker, error) {
 	componentWalker, err := w.base.OnRelative()
 	if err != nil {
@@ -261,17 +276,29 @@ func (w *buildingScopeWalker) OnRelative() (ComponentWalker, error) {
 	return w.b.getComponentWalker(componentWalker), nil
 }
 
-func (w *buildingScopeWalker) OnShare(server, share string) (ComponentWalker, error) {
-	componentWalker, err := w.base.OnShare(server, share)
+func (w *buildingScopeWalker) OnWindowsRoot(root WindowsRootKind) (ComponentWalker, error) {
+	componentWalker, err := w.base.OnWindowsRoot(root)
 	if err != nil {
 		return nil, err
 	}
-	*w.b = Builder{
-		absolute:   true,
-		components: w.b.components[:0],
-		server:     server,
-		share:      share,
-		suffix:     "/",
+	switch r := root.(type) {
+	case WindowsRootDriveLetter:
+		*w.b = Builder{
+			absolute:      true,
+			driveLetter:   r.Drive,
+			components:    w.b.components[:0],
+			suffix:        "/",
+			windowsPrefix: r.Prefix,
+		}
+	case WindowsRootShare:
+		*w.b = Builder{
+			absolute:      true,
+			components:    w.b.components[:0],
+			server:        r.Server,
+			share:         r.Share,
+			suffix:        "/",
+			windowsPrefix: r.Prefix,
+		}
 	}
 	return w.b.getComponentWalker(componentWalker), nil
 }

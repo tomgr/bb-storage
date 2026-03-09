@@ -34,17 +34,6 @@ func (w *loopDetectingScopeWalker) OnAbsolute() (ComponentWalker, error) {
 	}, nil
 }
 
-func (w *loopDetectingScopeWalker) OnDriveLetter(drive rune) (ComponentWalker, error) {
-	componentWalker, err := w.base.OnDriveLetter(drive)
-	if err != nil {
-		return nil, err
-	}
-	return &loopDetectingComponentWalker{
-		base:         componentWalker,
-		symlinksLeft: w.symlinksLeft,
-	}, nil
-}
-
 func (w *loopDetectingScopeWalker) OnRelative() (ComponentWalker, error) {
 	componentWalker, err := w.base.OnRelative()
 	if err != nil {
@@ -56,8 +45,8 @@ func (w *loopDetectingScopeWalker) OnRelative() (ComponentWalker, error) {
 	}, nil
 }
 
-func (w *loopDetectingScopeWalker) OnShare(server, share string) (ComponentWalker, error) {
-	componentWalker, err := w.base.OnShare(server, share)
+func (w *loopDetectingScopeWalker) OnWindowsRoot(root WindowsRootKind) (ComponentWalker, error) {
+	componentWalker, err := w.base.OnWindowsRoot(root)
 	if err != nil {
 		return nil, err
 	}

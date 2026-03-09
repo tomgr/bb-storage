@@ -26,6 +26,14 @@ func mustGetWindowsDevicePathString(p path.Stringer) string {
 	return s
 }
 
+func mustGetWindowsNoTrailingSeparatorString(p path.Stringer) string {
+	s, err := p.GetWindowsString(path.WindowsPathFormatNoTrailingSeparator)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
 func TestBuilder(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
@@ -208,30 +216,30 @@ func TestBuilder(t *testing.T) {
 
 	t.Run("WindowsNormalized", func(t *testing.T) {
 		for from, to := range map[string]string{
-			"":                                    ".",
-			"./":                                  ".",
-			"./.":                                 ".",
-			"../":                                 "..",
-			"../.":                                "..",
-			"/.":                                  "\\",
-			"/./":                                 "\\",
-			"/..":                                 "\\",
-			"/../":                                "\\",
-			"/hello/.":                            "\\hello\\",
-			"/hello/../.":                         "\\hello\\..",
-			"//Server/Share/hello":                "\\\\Server\\Share\\hello",
-			"//Server/Share/.":                    "\\\\Server\\Share\\",
-			"//Server/Share/./":                   "\\\\Server\\Share\\",
-			"//Server/Share/..":                   "\\\\Server\\Share\\",
-			"//Server/Share/../":                  "\\\\Server\\Share\\",
-			"//Server/Share/hello/.":              "\\\\Server\\Share\\hello\\",
-			"//Server/Share/hello/../.":           "\\\\Server\\Share\\hello\\..",
-			"/\\Server\\Share/hello/../.":         "\\\\Server\\Share\\hello\\..",
-			"\\\\?\\C:\\hello\\.":                 "C:\\hello\\",
-			"\\\\?\\UNC\\Server\\Share\\hello\\.": "\\\\Server\\Share\\hello\\",
-			"\\??\\C:\\hello\\.":                  "C:\\hello\\",
-			"\\??\\Z:\\file0":                     "Z:\\file0",
-			"\\??\\UNC\\Server\\Share\\hello\\.":  "\\\\Server\\Share\\hello\\",
+			"":                             ".",
+			"./":                           ".",
+			"./.":                          ".",
+			"../":                          "..",
+			"../.":                         "..",
+			"/.":                           "\\",
+			"/./":                          "\\",
+			"/..":                          "\\",
+			"/../":                         "\\",
+			"/hello/.":                     "\\hello\\",
+			"/hello/../.":                  "\\hello\\..",
+			"//Server/Share/hello":         "\\\\Server\\Share\\hello",
+			"//Server/Share/.":             "\\\\Server\\Share\\",
+			"//Server/Share/./":            "\\\\Server\\Share\\",
+			"//Server/Share/..":            "\\\\Server\\Share\\",
+			"//Server/Share/../":           "\\\\Server\\Share\\",
+			"//Server/Share/hello/.":       "\\\\Server\\Share\\hello\\",
+			"//Server/Share/hello/../.":    "\\\\Server\\Share\\hello\\..",
+			"/\\Server\\Share/hello/../.":  "\\\\Server\\Share\\hello\\..",
+			`\\?\C:\hello\.`:               `\\?\C:\hello\`,
+			`\\?\UNC\Server\Share\hello\.`: `\\?\UNC\Server\Share\hello\`,
+			`\??\C:\hello\.`:               `\??\C:\hello\`,
+			`\??\Z:\file0`:                 `\??\Z:\file0`,
+			`\??\UNC\Server\Share\hello\.`: `\??\UNC\Server\Share\hello\`,
 		} {
 			t.Run(from, func(t *testing.T) {
 				builder1, scopeWalker1 := path.EmptyBuilder.Join(path.VoidScopeWalker)
@@ -372,7 +380,7 @@ func TestBuilder(t *testing.T) {
 	t.Run("DriveLetterWithAbsoluteSymlink", func(t *testing.T) {
 		scopeWalker1 := mock.NewMockScopeWalker(ctrl)
 		componentWalker1 := mock.NewMockComponentWalker(ctrl)
-		scopeWalker1.EXPECT().OnDriveLetter('C').Return(componentWalker1, nil)
+		scopeWalker1.EXPECT().OnWindowsRoot(path.WindowsRootDriveLetter{Drive: 'C'}).Return(componentWalker1, nil)
 		scopeWalker2 := mock.NewMockScopeWalker(ctrl)
 		componentWalker1.EXPECT().OnTerminal(path.MustNewComponent("hello")).Return(
 			&path.GotSymlink{
@@ -393,7 +401,7 @@ func TestBuilder(t *testing.T) {
 	t.Run("UNCShareInvoke", func(t *testing.T) {
 		scopeWalker := mock.NewMockScopeWalker(ctrl)
 		componentWalker := mock.NewMockComponentWalker(ctrl)
-		scopeWalker.EXPECT().OnShare("server", "share").Return(componentWalker, nil)
+		scopeWalker.EXPECT().OnWindowsRoot(path.WindowsRootShare{Server: "server", Share: "share"}).Return(componentWalker, nil)
 		componentWalker.EXPECT().OnTerminal(path.MustNewComponent("file.txt"))
 
 		builder, s := path.EmptyBuilder.Join(scopeWalker)
@@ -404,45 +412,67 @@ func TestBuilder(t *testing.T) {
 	t.Run("ExtendedDrivePath", func(t *testing.T) {
 		scopeWalker := mock.NewMockScopeWalker(ctrl)
 		componentWalker := mock.NewMockComponentWalker(ctrl)
-		scopeWalker.EXPECT().OnDriveLetter('C').Return(componentWalker, nil)
+		scopeWalker.EXPECT().OnWindowsRoot(path.WindowsRootDriveLetter{Prefix: path.WindowsPrefixExtendedLength, Drive: 'C'}).Return(componentWalker, nil)
 		componentWalker.EXPECT().OnTerminal(path.MustNewComponent("file.txt"))
 
 		builder, s := path.EmptyBuilder.Join(scopeWalker)
-		require.NoError(t, path.Resolve(path.WindowsFormat.NewParser("\\\\?\\C:\\file.txt"), s))
-		require.Equal(t, "C:\\file.txt", mustGetWindowsString(builder))
+		require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(`\\?\C:\file.txt`), s))
+		require.Equal(t, `\\?\C:\file.txt`, mustGetWindowsString(builder))
 	})
 
 	t.Run("ExtendedUNCPath", func(t *testing.T) {
 		scopeWalker := mock.NewMockScopeWalker(ctrl)
 		componentWalker := mock.NewMockComponentWalker(ctrl)
-		scopeWalker.EXPECT().OnShare("server", "share").Return(componentWalker, nil)
+		scopeWalker.EXPECT().OnWindowsRoot(path.WindowsRootShare{Prefix: path.WindowsPrefixExtendedLength, Server: "server", Share: "share"}).Return(componentWalker, nil)
 		componentWalker.EXPECT().OnTerminal(path.MustNewComponent("file.txt"))
 
 		builder, s := path.EmptyBuilder.Join(scopeWalker)
-		require.NoError(t, path.Resolve(path.WindowsFormat.NewParser("\\\\?\\UNC\\server\\share\\file.txt"), s))
-		require.Equal(t, "\\\\server\\share\\file.txt", mustGetWindowsString(builder))
+		require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(`\\?\UNC\server\share\file.txt`), s))
+		require.Equal(t, `\\?\UNC\server\share\file.txt`, mustGetWindowsString(builder))
 	})
 
 	t.Run("NTObjectNamespaceDrivePath", func(t *testing.T) {
 		scopeWalker := mock.NewMockScopeWalker(ctrl)
 		componentWalker := mock.NewMockComponentWalker(ctrl)
-		scopeWalker.EXPECT().OnDriveLetter('Z').Return(componentWalker, nil)
+		scopeWalker.EXPECT().OnWindowsRoot(path.WindowsRootDriveLetter{Prefix: path.WindowsPrefixNtNamespace, Drive: 'Z'}).Return(componentWalker, nil)
 		componentWalker.EXPECT().OnTerminal(path.MustNewComponent("file0"))
 
 		builder, s := path.EmptyBuilder.Join(scopeWalker)
-		require.NoError(t, path.Resolve(path.WindowsFormat.NewParser("\\??\\Z:\\file0"), s))
-		require.Equal(t, "Z:\\file0", mustGetWindowsString(builder))
+		require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(`\??\Z:\file0`), s))
+		require.Equal(t, `\??\Z:\file0`, mustGetWindowsString(builder))
 	})
 
 	t.Run("NTObjectNamespaceUNCPath", func(t *testing.T) {
 		scopeWalker := mock.NewMockScopeWalker(ctrl)
 		componentWalker := mock.NewMockComponentWalker(ctrl)
-		scopeWalker.EXPECT().OnShare("myserver", "myshare").Return(componentWalker, nil)
+		scopeWalker.EXPECT().OnWindowsRoot(path.WindowsRootShare{Prefix: path.WindowsPrefixNtNamespace, Server: "myserver", Share: "myshare"}).Return(componentWalker, nil)
 		componentWalker.EXPECT().OnTerminal(path.MustNewComponent("data.txt"))
 
 		builder, s := path.EmptyBuilder.Join(scopeWalker)
-		require.NoError(t, path.Resolve(path.WindowsFormat.NewParser("\\??\\UNC\\myserver\\myshare\\data.txt"), s))
-		require.Equal(t, "\\\\myserver\\myshare\\data.txt", mustGetWindowsString(builder))
+		require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(`\??\UNC\myserver\myshare\data.txt`), s))
+		require.Equal(t, `\??\UNC\myserver\myshare\data.txt`, mustGetWindowsString(builder))
+	})
+
+	t.Run("DeviceDrivePath", func(t *testing.T) {
+		scopeWalker := mock.NewMockScopeWalker(ctrl)
+		componentWalker := mock.NewMockComponentWalker(ctrl)
+		scopeWalker.EXPECT().OnWindowsRoot(path.WindowsRootDriveLetter{Prefix: path.WindowsPrefixDevice, Drive: 'C'}).Return(componentWalker, nil)
+		componentWalker.EXPECT().OnTerminal(path.MustNewComponent("file.txt"))
+
+		builder, s := path.EmptyBuilder.Join(scopeWalker)
+		require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(`\\.\C:\file.txt`), s))
+		require.Equal(t, `\\.\C:\file.txt`, mustGetWindowsString(builder))
+	})
+
+	t.Run("DeviceUNCPath", func(t *testing.T) {
+		scopeWalker := mock.NewMockScopeWalker(ctrl)
+		componentWalker := mock.NewMockComponentWalker(ctrl)
+		scopeWalker.EXPECT().OnWindowsRoot(path.WindowsRootShare{Prefix: path.WindowsPrefixDevice, Server: "server", Share: "share"}).Return(componentWalker, nil)
+		componentWalker.EXPECT().OnTerminal(path.MustNewComponent("file.txt"))
+
+		builder, s := path.EmptyBuilder.Join(scopeWalker)
+		require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(`\\.\UNC\server\share\file.txt`), s))
+		require.Equal(t, `\\.\UNC\server\share\file.txt`, mustGetWindowsString(builder))
 	})
 
 	t.Run("RelativeDrivePaths", func(t *testing.T) {
@@ -467,15 +497,133 @@ func TestBuilder(t *testing.T) {
 		require.Equal(t, `\newfolder`, mustGetWindowsString(builder2))
 	})
 
+	// Tests that Standard format preserves namespace prefixes.
+	t.Run("StandardPrefixPreservation", func(t *testing.T) {
+		t.Run("ExtendedLengthDrivePaths", func(t *testing.T) {
+			for from, expected := range map[string]string{
+				`\\?\C:\`:            `\\?\C:\`,
+				`\\?\C:\file0`:       `\\?\C:\file0`,
+				`\\?\C:\hello\`:      `\\?\C:\hello\`,
+				`\\?\C:\hello\world`: `\\?\C:\hello\world`,
+			} {
+				t.Run(from, func(t *testing.T) {
+					builder1, scopeWalker1 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(from), scopeWalker1))
+					require.Equal(t, expected, mustGetWindowsString(builder1))
+
+					// Round-trip through Builder.ParseScope.
+					builder2, scopeWalker2 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(builder1, scopeWalker2))
+					require.Equal(t, expected, mustGetWindowsString(builder2))
+				})
+			}
+		})
+
+		t.Run("NtNamespaceDrivePaths", func(t *testing.T) {
+			for from, expected := range map[string]string{
+				`\??\Z:\`:            `\??\Z:\`,
+				`\??\Z:\file0`:       `\??\Z:\file0`,
+				`\??\Z:\hello\`:      `\??\Z:\hello\`,
+				`\??\Z:\hello\world`: `\??\Z:\hello\world`,
+			} {
+				t.Run(from, func(t *testing.T) {
+					builder1, scopeWalker1 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(from), scopeWalker1))
+					require.Equal(t, expected, mustGetWindowsString(builder1))
+
+					builder2, scopeWalker2 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(builder1, scopeWalker2))
+					require.Equal(t, expected, mustGetWindowsString(builder2))
+				})
+			}
+		})
+
+		t.Run("ExtendedLengthUNCPaths", func(t *testing.T) {
+			for from, expected := range map[string]string{
+				`\\?\UNC\Server\Share\`:            `\\?\UNC\Server\Share\`,
+				`\\?\UNC\Server\Share\file0`:       `\\?\UNC\Server\Share\file0`,
+				`\\?\UNC\Server\Share\hello\`:      `\\?\UNC\Server\Share\hello\`,
+				`\\?\UNC\Server\Share\hello\world`: `\\?\UNC\Server\Share\hello\world`,
+			} {
+				t.Run(from, func(t *testing.T) {
+					builder1, scopeWalker1 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(from), scopeWalker1))
+					require.Equal(t, expected, mustGetWindowsString(builder1))
+
+					builder2, scopeWalker2 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(builder1, scopeWalker2))
+					require.Equal(t, expected, mustGetWindowsString(builder2))
+				})
+			}
+		})
+
+		t.Run("NtNamespaceUNCPaths", func(t *testing.T) {
+			for from, expected := range map[string]string{
+				`\??\UNC\Server\Share\`:            `\??\UNC\Server\Share\`,
+				`\??\UNC\Server\Share\file0`:       `\??\UNC\Server\Share\file0`,
+				`\??\UNC\Server\Share\hello\`:      `\??\UNC\Server\Share\hello\`,
+				`\??\UNC\Server\Share\hello\world`: `\??\UNC\Server\Share\hello\world`,
+			} {
+				t.Run(from, func(t *testing.T) {
+					builder1, scopeWalker1 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(from), scopeWalker1))
+					require.Equal(t, expected, mustGetWindowsString(builder1))
+
+					builder2, scopeWalker2 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(builder1, scopeWalker2))
+					require.Equal(t, expected, mustGetWindowsString(builder2))
+				})
+			}
+		})
+
+		t.Run("DeviceDrivePaths", func(t *testing.T) {
+			for from, expected := range map[string]string{
+				`\\.\C:\`:            `\\.\C:\`,
+				`\\.\C:\file0`:       `\\.\C:\file0`,
+				`\\.\C:\hello\`:      `\\.\C:\hello\`,
+				`\\.\C:\hello\world`: `\\.\C:\hello\world`,
+			} {
+				t.Run(from, func(t *testing.T) {
+					builder1, scopeWalker1 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(from), scopeWalker1))
+					require.Equal(t, expected, mustGetWindowsString(builder1))
+
+					builder2, scopeWalker2 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(builder1, scopeWalker2))
+					require.Equal(t, expected, mustGetWindowsString(builder2))
+				})
+			}
+		})
+
+		t.Run("DeviceUNCPaths", func(t *testing.T) {
+			for from, expected := range map[string]string{
+				`\\.\UNC\Server\Share\`:            `\\.\UNC\Server\Share\`,
+				`\\.\UNC\Server\Share\file0`:       `\\.\UNC\Server\Share\file0`,
+				`\\.\UNC\Server\Share\hello\`:      `\\.\UNC\Server\Share\hello\`,
+				`\\.\UNC\Server\Share\hello\world`: `\\.\UNC\Server\Share\hello\world`,
+			} {
+				t.Run(from, func(t *testing.T) {
+					builder1, scopeWalker1 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(from), scopeWalker1))
+					require.Equal(t, expected, mustGetWindowsString(builder1))
+
+					builder2, scopeWalker2 := path.EmptyBuilder.Join(path.VoidScopeWalker)
+					require.NoError(t, path.Resolve(builder1, scopeWalker2))
+					require.Equal(t, expected, mustGetWindowsString(builder2))
+				})
+			}
+		})
+	})
+
 	// Tests specifically for WindowsPathFormatDevicePath format.
 	t.Run("DevicePathFormat", func(t *testing.T) {
 		t.Run("DriveLetterPaths", func(t *testing.T) {
 			for from, expectedDevice := range map[string]string{
-				"C:\\":               "\\??\\C:\\",
-				"C:\\hello":          "\\??\\C:\\hello",
-				"C:\\hello\\":        "\\??\\C:\\hello\\",
-				"C:\\hello\\world":   "\\??\\C:\\hello\\world",
-				"C:\\hello\\world\\": "\\??\\C:\\hello\\world\\",
+				`C:\`:             `\??\C:\`,
+				`C:\hello`:        `\??\C:\hello`,
+				`C:\hello\`:       `\??\C:\hello\`,
+				`C:\hello\world`:  `\??\C:\hello\world`,
+				`C:\hello\world\`: `\??\C:\hello\world\`,
 			} {
 				t.Run(from, func(t *testing.T) {
 					builder, scopeWalker := path.EmptyBuilder.Join(path.VoidScopeWalker)
@@ -487,10 +635,10 @@ func TestBuilder(t *testing.T) {
 
 		t.Run("UNCPaths", func(t *testing.T) {
 			for from, expectedDevice := range map[string]string{
-				"\\\\server\\share\\":             "\\??\\UNC\\server\\share\\",
-				"\\\\server\\share\\hello":        "\\??\\UNC\\server\\share\\hello",
-				"\\\\server\\share\\hello\\":      "\\??\\UNC\\server\\share\\hello\\",
-				"\\\\server\\share\\hello\\world": "\\??\\UNC\\server\\share\\hello\\world",
+				`\\server\share\`:            `\??\UNC\server\share\`,
+				`\\server\share\hello`:       `\??\UNC\server\share\hello`,
+				`\\server\share\hello\`:      `\??\UNC\server\share\hello\`,
+				`\\server\share\hello\world`: `\??\UNC\server\share\hello\world`,
 			} {
 				t.Run(from, func(t *testing.T) {
 					builder, scopeWalker := path.EmptyBuilder.Join(path.VoidScopeWalker)
@@ -502,11 +650,11 @@ func TestBuilder(t *testing.T) {
 
 		t.Run("RelativePaths", func(t *testing.T) {
 			for from, expectedDevice := range map[string]string{
-				".":            ".",
-				"..":           "..",
-				"hello":        "hello",
-				"hello\\":      "hello\\",
-				"hello\\world": "hello\\world",
+				".":           ".",
+				"..":          "..",
+				"hello":       "hello",
+				`hello\`:      `hello\`,
+				`hello\world`: `hello\world`,
 			} {
 				t.Run(from, func(t *testing.T) {
 					builder, scopeWalker := path.EmptyBuilder.Join(path.VoidScopeWalker)
@@ -521,8 +669,8 @@ func TestBuilder(t *testing.T) {
 			// Absolute paths cannot be represented as NT device
 			// paths.
 			for from, to := range map[string]string{
-				"\\":             "\\",
-				"\\hello\\world": "\\hello\\world",
+				`\`:            `\`,
+				`\hello\world`: `\hello\world`,
 			} {
 				t.Run(from, func(t *testing.T) {
 					builder, scopeWalker := path.EmptyBuilder.Join(path.VoidScopeWalker)
@@ -531,5 +679,36 @@ func TestBuilder(t *testing.T) {
 				})
 			}
 		})
+	})
+
+	// Tests for WindowsPathFormatNoTrailingSeparator. This format
+	// suppresses the trailing "\" on directory paths that have
+	// components, which is needed for symlink substitute names.
+	t.Run("NoTrailingSeparatorFormat", func(t *testing.T) {
+		for from, expected := range map[string]string{
+			// Root-only paths keep their trailing separator.
+			`C:\`:                   `C:\`,
+			`\\server\share\`:       `\\server\share\`,
+			`\\?\C:\`:               `\\?\C:\`,
+			`\??\C:\`:               `\??\C:\`,
+			`\\?\UNC\Server\Share\`: `\\?\UNC\Server\Share\`,
+			`\??\UNC\Server\Share\`: `\??\UNC\Server\Share\`,
+			// Directory paths with components lose the trailing separator.
+			`C:\hello\`:                `C:\hello`,
+			`C:\hello\world\`:          `C:\hello\world`,
+			`\\server\share\hello\`:    `\\server\share\hello`,
+			`\\?\C:\hello\`:            `\\?\C:\hello`,
+			`\??\C:\hello\`:            `\??\C:\hello`,
+			// Non-directory paths are unaffected.
+			`C:\hello`:                `C:\hello`,
+			`C:\hello\world`:          `C:\hello\world`,
+			`\\server\share\file.txt`: `\\server\share\file.txt`,
+		} {
+			t.Run(from, func(t *testing.T) {
+				builder, scopeWalker := path.EmptyBuilder.Join(path.VoidScopeWalker)
+				require.NoError(t, path.Resolve(path.WindowsFormat.NewParser(from), scopeWalker))
+				require.Equal(t, expected, mustGetWindowsNoTrailingSeparatorString(builder))
+			})
+		}
 	})
 }

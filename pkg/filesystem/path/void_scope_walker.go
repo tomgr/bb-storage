@@ -6,15 +6,11 @@ func (voidScopeWalker) OnAbsolute() (ComponentWalker, error) {
 	return VoidComponentWalker, nil
 }
 
-func (voidScopeWalker) OnDriveLetter(drive rune) (ComponentWalker, error) {
-	return VoidComponentWalker, nil
-}
-
 func (voidScopeWalker) OnRelative() (ComponentWalker, error) {
 	return VoidComponentWalker, nil
 }
 
-func (voidScopeWalker) OnShare(server, share string) (ComponentWalker, error) {
+func (voidScopeWalker) OnWindowsRoot(root WindowsRootKind) (ComponentWalker, error) {
 	return VoidComponentWalker, nil
 }
 

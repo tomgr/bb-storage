@@ -57,7 +57,7 @@ type ComponentWalker interface {
 	// function will return a GotSymlink containing a ScopeWalker, which
 	// can be used to perform expansion of the symbolic link. The
 	// Resolve() function will call into OnAbsolute(), OnRelative() or
-	// OnDriveLetter() to signal whether resolution should continue at
+	// OnWindowsRoot() to signal whether resolution should continue at
 	// the root directory or at the directory that contained the
 	// symbolic link.
 	OnDirectory(name Component) (GotDirectoryOrSymlink, error)
